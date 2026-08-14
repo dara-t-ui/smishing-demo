@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Smishing Detector</title>
+<style>
+  :root {
+    --ink: #14161a;
+    --paper: #f6f4ef;
+    --line: #d9d4c8;
+    --muted: #6b6659;
+    --safe: #1f7a4d;
+    --safe-bg: #e6f2ea;
+    --danger: #c0392b;
+    --danger-bg: #fbe9e7;
+    --amber: #b7791f;
+    --amber-bg: #fdf3e3;
+    --accent: #2b2d42;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--paper); color: var(--ink); }
+  body {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    -webkit-font-smoothing: antialiased;
+    padding: 24px 18px 60px;
+    max-width: 640px;
+    margin: 0 auto;
+    min-height: 100vh;
+  }
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  h1 {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 30px;
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    margin-bottom: 8px;
+  }
+  .sub {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+    margin-bottom: 26px;
+    max-width: 46ch;
+  }
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 12px;
+    margin-bottom: 22px;
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--amber);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  .dot.ready { background: var(--safe); animation: none; }
+  .dot.err { background: var(--danger); animation: none; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+    font-family: inherit;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--ink);
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px;
+    outline: none;
+  }
+  textarea:focus { border-color: var(--accent); }
+
+  button {
+    width: 100%;
+    margin-top: 14px;
+    font-family: inherit;
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    color: #fff;
+    background: var(--accent);
+    border: none;
+    border-radius: 10px;
+    padding: 15px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button:active { opacity: 0.8; }
+
+  .samples { margin-top: 18px; }
+  .samples-title { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .chip {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    font-size: 12.5px;
+    line-height: 1.4;
+    color: var(--ink);
+    background: transparent;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 0 0 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .chip:hover { background: #efece4; }
+
+  .verdict {
+    margin-top: 26px;
+    border-radius: 12px;
+    padding: 22px;
+    border: 1px solid var(--line);
+    display: none;
+  }
+  .verdict.show { display: block; animation: rise 0.3s ease; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .verdict-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .verdict-label {
+    font-family: Georgia, serif;
+    font-size: 22px;
+    font-weight: 600;
+  }
+  .verdict-pct { font-size: 15px; font-variant-numeric: tabular-nums; }
+  .meter {
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.08);
+    overflow: hidden;
+  }
+  .meter-fill { height: 100%; width: 0; border-radius: 999px; transition: width 0.5s ease; }
+  .verdict-note { font-size: 12.5px; line-height: 1.5; margin-top: 12px; color: var(--muted); }
+
+  .v-danger { background: var(--danger-bg); border-color: #f0c8c2; }
+  .v-danger .verdict-label, .v-danger .verdict-pct { color: var(--danger); }
+  .v-danger .meter-fill { background: var(--danger); }
+  .v-safe { background: var(--safe-bg); border-color: #bfe0cd; }
+  .v-safe .verdict-label, .v-safe .verdict-pct { color: var(--safe); }
+  .v-safe .meter-fill { background: var(--safe); }
+  .v-amber { background: var(--amber-bg); border-color: #ecd9b0; }
+  .v-amber .verdict-label, .v-amber .verdict-pct { color: var(--amber); }
+  .v-amber .meter-fill { background: var(--amber); }
+
+  footer {
+    margin-top: 40px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+  <div class="eyebrow">On-device · Offline capable</div>
+  <h1>Smishing Detector</h1>
+  <p class="sub">Paste a text message. A distilled transformer model runs entirely in your browser and flags whether it looks like a scam. Nothing you type leaves this device.</p>
+
+  <div class="status" id="status"><span class="dot" id="dot"></span><span id="statusText">Loading model…</span></div>
+
+  <label for="msg">Message</label>
+  <textarea id="msg" placeholder="e.g. Your parcel is held pending a £1.45 redelivery fee. Pay at…"></textarea>
+  <button id="check" disabled>Check message</button>
+
+  <div class="samples">
+    <div class="samples-title">Try an example</div>
+    <button class="chip" data-fill="HMRC: You are due a tax refund of £287.40. Claim now at hmrc-refund-gateway.net">HMRC tax refund scam</button>
+    <button class="chip" data-fill="Mum I dropped my phone down the toilet, this is my new number. Can you WhatsApp me x">"Mum, new number" message</button>
+    <button class="chip" data-fill="Your verification code is 448213. Do not share it with anyone.">Genuine verification code</button>
+    <button class="chip" data-fill="Hey are we still on for coffee at 11? Running about 10 mins late sorry">Ordinary text from a friend</button>
+  </div>
+
+  <div class="verdict" id="verdict">
+    <div class="verdict-head">
+      <span class="verdict-label" id="vLabel"></span>
+      <span class="verdict-pct" id="vPct"></span>
+    </div>
+    <div class="meter"><div class="meter-fill" id="vFill"></div></div>
+    <div class="verdict-note" id="vNote"></div>
+  </div>
+
+  <footer>
+    Model: distilled 3-layer RoBERTa (int8, ~61&nbsp;MB), fine-tuned for SMS fraud detection and run via ONNX in-browser. A proof-of-concept for on-device, privacy-preserving smishing detection — not a substitute for your own judgement.
+  </footer>
+
+<script type="module">
+import { AutoTokenizer, AutoModelForSequenceClassification, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2";
+
+env.allowRemoteModels = true;
+
+const REPO = "re21-dee/smishing-detector";
+const MAXLEN = 64;
+
+const dot = document.getElementById("dot");
+const statusText = document.getElementById("statusText");
+const btn = document.getElementById("check");
+const msg = document.getElementById("msg");
+const verdict = document.getElementById("verdict");
+
+let tokenizer = null, model = null;
+
+async function load() {
+  try {
+    tokenizer = await AutoTokenizer.from_pretrained(REPO);
+    model = await AutoModelForSequenceClassification.from_pretrained(REPO, { quantized: true });
+    dot.classList.add("ready");
+    statusText.textContent = "Model ready · running locally";
+    btn.disabled = false;
+  } catch (e) {
+    dot.classList.add("err");
+    statusText.textContent = "Model failed to load — see console";
+    console.error(e);
+  }
+}
+
+function softmax(arr) {
+  const m = Math.max(...arr);
+  const ex = arr.map(x => Math.exp(x - m));
+  const s = ex.reduce((a, b) => a + b, 0);
+  return ex.map(x => x / s);
+}
+
+function render(fraudProb) {
+  const pct = Math.round(fraudProb * 100);
+  verdict.className = "verdict show";
+  const fill = document.getElementById("vFill");
+  const label = document.getElementById("vLabel");
+  const pctEl = document.getElementById("vPct");
+  const note = document.getElementById("vNote");
+
+  if (fraudProb >= 0.65) {
+    verdict.classList.add("v-danger");
+    label.textContent = "⚠ Scam detected";
+    note.textContent = "This message has the hallmarks of a fraudulent text. Do not click any links, call any numbers, or share personal or financial details.";
+  } else if (fraudProb >= 0.4) {
+    verdict.classList.add("v-amber");
+    label.textContent = "Possibly suspicious";
+    note.textContent = "This message is borderline. Treat it with caution — verify the sender through an official channel before acting.";
+  } else {
+    verdict.classList.add("v-safe");
+    label.textContent = "✓ Looks safe";
+    note.textContent = "No strong signs of fraud. Stay alert regardless — no detector is perfect.";
+  }
+  pctEl.textContent = pct + "% fraud";
+  requestAnimationFrame(() => { fill.style.width = pct + "%"; });
+}
+
+async function check() {
+  const text = msg.value.trim();
+  if (!text || !model) return;
+  btn.disabled = true;
+  statusText.textContent = "Analysing…";
+  try {
+    // Tokenise with FIXED length 64 (pad + truncate) to match the exported model
+    const enc = await tokenizer(text, {
+      padding: "max_length",
+      max_length: MAXLEN,
+      truncation: true,
+    });
+    const output = await model(enc);
+    const logits = Array.from(output.logits.data);   // [logit_legit, logit_fraud]
+    const probs = softmax(logits);
+    render(probs[1]);
+    statusText.textContent = "Model ready · running locally";
+  } catch (e) {
+    statusText.textContent = "Analysis failed — see console";
+    console.error(e);
+  }
+  btn.disabled = false;
+}
+
+btn.addEventListener("click", check);
+document.querySelectorAll(".chip").forEach(c => {
+  c.addEventListener("click", () => { msg.value = c.dataset.fill; msg.focus(); });
+});
+
+load();
+</script>
